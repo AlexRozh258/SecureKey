@@ -1,246 +1,161 @@
 #include "totp_engine.h"
 #include <openssl/hmac.h>
-#include <openssl/evp.h>
 #include <openssl/rand.h>
-#include <string.h>
-#include <stdio.h>
 #include <time.h>
-#include <math.h>
-#include <stdint.h>
-#include <stddef.h> 
+#include <string.h>
 
-static const char base32_alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-static const char base32_padding = '=';
+#define TOTP_TIME_STEP 30
+#define TOTP_CODE_DIGITS 6
 
-
-uint32_t totp_generate(const uint8_t* key, size_t key_len, 
-                      time_t timestamp, const totp_config_t* config) {
-    if (!key || !config) return 0;
-    
-    uint64_t time_step = totp_calculate_time_step(timestamp, config->time_step);
-    
-    uint8_t time_bytes[8];
-    for (int i = 7; i >= 0; i--) {
-        time_bytes[i] = (time_step >> (8 * (7 - i))) & 0xFF;
+static uint32_t power10(int exponent) {
+    uint32_t result = 1;
+    for (int i = 0; i < exponent; i++) {
+        result *= 10;
     }
-    
-    uint8_t hmac_result[EVP_MAX_MD_SIZE];
-    unsigned int hmac_len;
-    
-    const EVP_MD* md = NULL;
-    switch (config->algorithm) {
-        case SHA1:
-            md = EVP_sha1();
-            break;
-        case SHA256:
-            md = EVP_sha256();
-            break;
-        case SHA512:
-            md = EVP_sha512();
-            break;
-        default:
-            md = EVP_sha1();
-    }
-    
-    if (!HMAC(md, key, (int)key_len, time_bytes, sizeof(time_bytes), hmac_result, &hmac_len)) {
-        return 0;
-    }
-    
-    int offset = hmac_result[hmac_len - 1] & 0x0F;
-
-    uint32_t binary_code = 
-        ((hmac_result[offset] & 0x7F) << 24) |
-        (hmac_result[offset + 1] << 16) |
-        (hmac_result[offset + 2] << 8) |
-        (hmac_result[offset + 3]);
-    
-    uint32_t modulus = 1;
-    for (int i = 0; i < config->digits; i++) {
-        modulus *= 10;
-    }
-    
-    return binary_code % modulus;
+    return result;
 }
 
-
-int totp_generate_secret(uint8_t* key, size_t key_len) {
-    if (!key || key_len < 10) { 
-        return -1;
-    }
+int base32_decode(const char* encoded, unsigned char* result, size_t buf_len) {
+    if (!encoded || !result) return -1;
     
-
-    if (RAND_bytes(key, (int)key_len) != 1) {
-        return -1;
-    }
+    const char base32_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    size_t len = strlen(encoded);
+    size_t output_size = (len * 5 + 7) / 8;
     
-    return 0;
-}
-
-int totp_generate_secret_base32(char* output, size_t output_len, size_t key_bits) {
-    if (!output) {
-        return -1;
-    }
+    if (output_size > buf_len) return -1;
     
-    size_t key_len = (key_bits + 7) / 8;
+    memset(result, 0, output_size);
     
-    if (key_len < 10) key_len = 10;
-    if (key_len > 32) key_len = 32;
+    int buffer = 0, bits = 0;
+    size_t count = 0;
     
-    size_t min_base32_len = ((key_len * 8) + 4) / 5;
-    min_base32_len = (min_base32_len + 7) / 8 * 8 + 1;
-    
-    if (output_len < min_base32_len) {
-        return -1;
-    }
-    
-    uint8_t key[32];
-    if (totp_generate_secret(key, key_len) != 0) {
-        return -1;
-    }
-    
-    int result = totp_encode_base32(key, key_len, output, output_len);
-    if (result < 0) {
-        return -1;
-    }
-    
-    return 0;
-}
-
-uint32_t totp_generate_current(const uint8_t* key, size_t key_len, 
-                              const totp_config_t* config) {
-    time_t now = totp_current_time();
-    return totp_generate(key, key_len, now, config);
-}
-
-int totp_verify(const uint8_t* key, size_t key_len, 
-               time_t timestamp, uint32_t code, 
-               const totp_config_t* config, int window) {
-    if (!key || !config) return 0;
-    
-
-    if (totp_generate(key, key_len, timestamp, config) == code) {
-        return 1;
-    }
-    
-
-    for (int i = -window; i <= window; i++) {
-        if (i == 0) continue;
+    for (size_t i = 0; i < len; i++) {
+        char ch = encoded[i];
+        const char* p = strchr(base32_chars, ch);
+        if (!p) continue;
         
-        time_t test_time = timestamp + (i * config->time_step);
-        if (totp_generate(key, key_len, test_time, config) == code) {
-            return 1;
+        buffer = (buffer << 5) | (p - base32_chars);
+        bits += 5;
+        
+        if (bits >= 8) {
+            result[count++] = (buffer >> (bits - 8)) & 0xFF;
+            bits -= 8;
         }
     }
     
-    return 0;
+    return count;
 }
 
-
-int totp_decode_base32(const char* base32_str, uint8_t* key, size_t key_len) {
-    if (!base32_str || !key) return -1;
+int base32_encode(const unsigned char* data, size_t len, char* result, size_t buf_len) {
+    if (!data || !result) return -1;
     
-    size_t input_len = strlen(base32_str);
-    size_t output_len = 0;
-
-    size_t expected_len = (input_len * 5) / 8;
-    if (expected_len > key_len) return -1;
+    const char base32_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    size_t output_size = (len * 8 + 4) / 5;
     
-    uint32_t buffer = 0;
-    int bits_remaining = 0;
+    if (output_size + 1 > buf_len) return -1;
     
-    for (size_t i = 0; i < input_len; i++) {
-        char c = base32_str[i];
-        
-        if (c == ' ' || c == base32_padding) continue;
-        
-        const char* pos = strchr(base32_alphabet, c);
-        if (!pos) return -1;
-        
-        int value = pos - base32_alphabet;
-        buffer = (buffer << 5) | value;
-        bits_remaining += 5;
-        
-        if (bits_remaining >= 8) {
-            bits_remaining -= 8;
-            key[output_len++] = (buffer >> bits_remaining) & 0xFF;
-        }
-    }
+    memset(result, 0, buf_len);
     
-    return (int)output_len;
-}
-
-int totp_encode_base32(const uint8_t* key, size_t key_len, char* output, size_t output_len) {
-    if (!key || !output) return -1;
+    int buffer = data[0];
+    int bits = 8;
+    size_t count = 0;
+    size_t index = 1;
     
-    size_t min_output_len = ((key_len * 8) + 4) / 5;
-    min_output_len = (min_output_len + 7) / 8 * 8 + 1;
-    
-    if (output_len < min_output_len) {
-        return -1;
-    }
-    
-    size_t input_index = 0;
-    size_t output_index = 0;
-    uint32_t buffer = 0;
-    int bits_remaining = 0;
-    
-    while (input_index < key_len || bits_remaining > 0) {
-        if (bits_remaining < 5) {
-            if (input_index < key_len) {
-                buffer = (buffer << 8) | key[input_index++];
-                bits_remaining += 8;
+    while (bits > 0 || index < len) {
+        if (bits < 5) {
+            if (index < len) {
+                buffer = (buffer << 8) | data[index++];
+                bits += 8;
             } else {
-                buffer <<= (5 - bits_remaining);
-                bits_remaining = 5;
+                break;
             }
         }
         
-        bits_remaining -= 5;
-        int value = (buffer >> bits_remaining) & 0x1F;
-        output[output_index++] = base32_alphabet[value];
+        int value = (buffer >> (bits - 5)) & 0x1F;
+        bits -= 5;
+        result[count++] = base32_chars[value];
     }
     
+    return count;
+}
 
-    while (output_index % 8 != 0) {
-        output[output_index++] = base32_padding;
+uint32_t generate_totp(const char* base32_secret) {
+    if (!base32_secret) return 0;
+    
+    unsigned char secret[32];
+    int secret_len = base32_decode(base32_secret, secret, sizeof(secret));
+    if (secret_len <= 0) return 0;
+
+    uint64_t time_steps = (uint64_t)time(NULL) / TOTP_TIME_STEP;
+    
+    unsigned char time_bytes[8];
+    for (int i = 7; i >= 0; i--) {
+        time_bytes[i] = time_steps & 0xFF;
+        time_steps >>= 8;
     }
     
-    output[output_index] = '\0';
-    return (int)output_index;
-}
-
-
-uint8_t totp_get_time_remaining(time_t timestamp, const totp_config_t* config) {
-    if (!config) return 0;
+    unsigned char hmac[20];
+    unsigned int hmac_len;
+    HMAC(EVP_sha1(), secret, secret_len, time_bytes, 8, hmac, &hmac_len);
     
-    uint64_t time_step = totp_calculate_time_step(timestamp, config->time_step);
-    time_t next_step = (time_step + 1) * config->time_step;
-    uint8_t remaining = (uint8_t)(next_step - timestamp);
-    return (remaining <= config->time_step) ? remaining : 0;
-}
+    int offset = hmac[hmac_len - 1] & 0x0F;
+    uint32_t code = ((hmac[offset] & 0x7F) << 24) |
+                   (hmac[offset + 1] << 16) |
+                   (hmac[offset + 2] << 8) |
+                   hmac[offset + 3];
 
-time_t totp_current_time(void) {
-    return time(NULL);
-}
-
-
-uint64_t totp_calculate_time_step(time_t timestamp, uint8_t time_step) {
-    return timestamp / time_step;
-}
-
-
-
-int totp_generate_otpauth_url(char* buffer, size_t buffer_size,
-                             const char* secret, const char* issuer,
-                             const char* account_name, const totp_config_t* config) {
-
-    (void)buffer;
-    (void)buffer_size;
-    (void)secret;
-    (void)issuer;
-    (void)account_name;
-    (void)config;
+    uint32_t totp_code = code % power10(TOTP_CODE_DIGITS);
     
+    memset(secret, 0, sizeof(secret));
+    return totp_code;
+}
 
-    return -1;
+int generate_totp_secret(char* output, size_t output_len) {
+    if (!output || output_len < 17) return -1;
+    
+    unsigned char random_bytes[10];
+    if (RAND_bytes(random_bytes, sizeof(random_bytes)) != 1) {
+        return -1;
+    }
+    
+    int result = base32_encode(random_bytes, sizeof(random_bytes), output, output_len);
+    memset(random_bytes, 0, sizeof(random_bytes));
+    
+    return result > 0 ? 0 : -1;
+}
+
+int validate_totp(const char* base32_secret, uint32_t code) {
+    if (!base32_secret) return -1;
+    
+    if (generate_totp(base32_secret) == code) {
+        return 0;
+    }
+    
+    time_t old_time = time(NULL) - TOTP_TIME_STEP;
+    uint64_t old_steps = (uint64_t)old_time / TOTP_TIME_STEP;
+    
+    unsigned char secret[32];
+    int secret_len = base32_decode(base32_secret, secret, sizeof(secret));
+    if (secret_len <= 0) return -1;
+    
+    unsigned char time_bytes[8];
+    for (int i = 7; i >= 0; i--) {
+        time_bytes[i] = old_steps & 0xFF;
+        old_steps >>= 8;
+    }
+    
+    unsigned char hmac[20];
+    unsigned int hmac_len;
+    HMAC(EVP_sha1(), secret, secret_len, time_bytes, 8, hmac, &hmac_len);
+    
+    int offset = hmac[hmac_len - 1] & 0x0F;
+    uint32_t old_code = ((hmac[offset] & 0x7F) << 24) |
+                       (hmac[offset + 1] << 16) |
+                       (hmac[offset + 2] << 8) |
+                       hmac[offset + 3];
+    
+    uint32_t old_totp = old_code % power10(TOTP_CODE_DIGITS);
+    
+    memset(secret, 0, sizeof(secret));
+    return (old_totp == code) ? 0 : -1;
 }
