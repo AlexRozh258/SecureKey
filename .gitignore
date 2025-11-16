@@ -1,0 +1,38 @@
+# Build outputs
+securekey
+test_crypto
+test_totp
+test_vault
+*.o
+*.a
+*.so
+
+# Binaries
+bin/
+obj/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Documentation
+docs/_build/
+
+# Local configuration
+config.local
+.env
+
+SecureKey_compressed.pdf
