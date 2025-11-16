@@ -8,8 +8,6 @@
 #define VAULT_MAGIC "SKEY"
 #define VAULT_VERSION 1
 #define VAULT_DEFAULT_PATH "~/.securekey/vault.dat"
-#define VAULT_BACKUP_DIR "~/.securekey/backups"
-#define VAULT_MAX_BACKUPS 5
 
 #define VAULT_SERVICE_LEN 256
 #define VAULT_USERNAME_LEN 256
@@ -62,17 +60,9 @@ void vault_cleanup(void);
 int vault_change_master_password(const char* old_password,
                                   const char* new_password);
 
-int vault_export(const char* output_path, const char* master_password);
-
-int vault_import(const char* input_path, const char* master_password);
-
 int vault_backup(const char* vault_path);
 
 int vault_restore(const char* backup_path, const char* vault_path);
-
-int vault_list_backups(const char* vault_path);
-
-int vault_cleanup_backups(const char* vault_path, int keep_count);
 
 bool vault_exists(const char* vault_path);
 
@@ -85,4 +75,4 @@ int vault_find_entry(const char* service, const char* username);
 const char* vault_get_default_path(void);
 int vault_ensure_directory(void);
 
-#endif // VAULT_CONTROLLER_H
+#endif 
