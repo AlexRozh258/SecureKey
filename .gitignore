@@ -37,4 +37,12 @@ config.local
 
 SecureKey_compressed.pdf
 
+# Vault files
+*.vault
+vault.dat
+*.dat
+*.backup
+*.bak
+.securekey/
+
 .claude
