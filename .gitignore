@@ -36,3 +36,5 @@ config.local
 .env
 
 SecureKey_compressed.pdf
+
+.claude
