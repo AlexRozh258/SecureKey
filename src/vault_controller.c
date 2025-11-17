@@ -78,7 +78,6 @@ int vault_find_entry(const char* service, const char* username) {
     return -1;
 }
 
-// Helper: Copy file (used for backup/restore)
 static int copy_file(const char* src_path, const char* dst_path) {
     FILE* src = fopen(src_path, "rb");
     if (!src) {
@@ -108,7 +107,6 @@ static int copy_file(const char* src_path, const char* dst_path) {
     return 0;
 }
 
-// Helper: Save vault to file (combines header + entries write)
 static int save_vault(void) {
     FILE* fp = fopen(g_vault.vault_path, "rb+");
     if (!fp) {
@@ -124,7 +122,6 @@ static int save_vault(void) {
         return -1;
     }
 
-    // Write encrypted entries
     if (g_vault.header.entry_count == 0) {
         ftruncate(fileno(fp), sizeof(VaultHeader));
         fclose(fp);
@@ -132,7 +129,7 @@ static int save_vault(void) {
     }
 
     size_t plaintext_size = g_vault.header.entry_count * sizeof(VaultEntry);
-    unsigned char* ciphertext = malloc(plaintext_size + IV_SIZE + 64);
+    unsigned char* ciphertext = (unsigned char*)malloc(plaintext_size + IV_SIZE + 64);
     if (!ciphertext) {
         fprintf(stderr, "Memory allocation failed\n");
         fclose(fp);
@@ -194,7 +191,7 @@ static int read_vault_entries(FILE* fp) {
     size_t plaintext_size = g_vault.header.entry_count * sizeof(VaultEntry);
     size_t ciphertext_max_size = plaintext_size + IV_SIZE + 64;
 
-    unsigned char* ciphertext = malloc(ciphertext_max_size);
+    unsigned char* ciphertext = (unsigned char*)malloc(ciphertext_max_size);
     if (!ciphertext) {
         fprintf(stderr, "Memory allocation failed\n");
         return -1;
@@ -208,7 +205,7 @@ static int read_vault_entries(FILE* fp) {
         return -1;
     }
 
-    unsigned char* plaintext = malloc(plaintext_size);
+    unsigned char* plaintext = (unsigned char*)malloc(plaintext_size);
     if (!plaintext) {
         fprintf(stderr, "Memory allocation failed\n");
         free(ciphertext);
@@ -295,7 +292,7 @@ int vault_init(const char* master_password, const char* vault_path) {
         }
     }
 
-    if (derive_key(master_password, g_vault.key) != 0) {
+    if (derive_key_with_salt(master_password, g_vault.header.salt, SALT_SIZE, g_vault.key) != 0) {
         fprintf(stderr, "Failed to derive encryption key\n");
         fclose(fp);
         return -1;
@@ -355,7 +352,7 @@ int vault_store(const char* service, const char* username,
     if (existing_index >= 0) {
         g_vault.entries[existing_index] = new_entry;
     } else {
-        VaultEntry* new_entries = realloc(g_vault.entries,
+        VaultEntry* new_entries = (VaultEntry*)realloc(g_vault.entries,
                                           (g_vault.header.entry_count + 1) * sizeof(VaultEntry));
         if (!new_entries) {
             fprintf(stderr, "Memory allocation failed\n");
@@ -457,7 +454,7 @@ int vault_remove(const char* service, const char* username) {
     g_vault.header.entry_count--;
 
     if (g_vault.header.entry_count > 0) {
-        VaultEntry* new_entries = realloc(g_vault.entries,
+        VaultEntry* new_entries = (VaultEntry*)realloc(g_vault.entries,
                                           g_vault.header.entry_count * sizeof(VaultEntry));
         if (new_entries) {
             g_vault.entries = new_entries;
@@ -558,7 +555,7 @@ int vault_change_master_password(const char* old_password, const char* new_passw
     }
 
     unsigned char old_key[32];
-    if (derive_key(old_password, old_key) != 0) {
+    if (derive_key_with_salt(old_password, g_vault.header.salt, SALT_SIZE, old_key) != 0) {
         fprintf(stderr, "Failed to derive old key\n");
         return -1;
     }
@@ -581,7 +578,7 @@ int vault_change_master_password(const char* old_password, const char* new_passw
     }
 
     unsigned char new_key[32];
-    if (derive_key(new_password, new_key) != 0) {
+    if (derive_key_with_salt(new_password, g_vault.header.salt, SALT_SIZE, new_key) != 0) {
         fprintf(stderr, "Failed to derive new key\n");
         return -1;
     }
@@ -630,7 +627,7 @@ bool vault_verify_password(const char* vault_path, const char* master_password) 
     fclose(fp);
 
     unsigned char key[32];
-    if (derive_key(master_password, key) != 0) {
+    if (derive_key_with_salt(master_password, header.salt, SALT_SIZE, key) != 0) {
         return false;
     }
 

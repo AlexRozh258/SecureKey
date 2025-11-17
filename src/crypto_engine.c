@@ -27,6 +27,15 @@ int derive_key(const char* password, unsigned char* key) {
     ) == 1 ? 0 : -1;
 }
 
+int derive_key_with_salt(const char* password, const unsigned char* salt, size_t salt_len, unsigned char* key) {
+    return PKCS5_PBKDF2_HMAC(
+        password, strlen(password),
+        salt, salt_len,
+        100000, EVP_sha256(),
+        KEY_LEN, key
+    ) == 1 ? 0 : -1;
+}
+
 int encrypt_data(const unsigned char* plaintext, size_t len,
                  const unsigned char* key, unsigned char* ciphertext) {
     unsigned char iv[IV_LEN];
