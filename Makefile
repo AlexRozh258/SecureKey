@@ -16,27 +16,32 @@ all: $(TARGET)
 $(TARGET): $(MAIN_SOURCE) $(C_SOURCES) $(DEPS)
 	$(CC) $(CFLAGS) $(MAIN_SOURCE) $(C_SOURCES) -o $(TARGET) $(LDFLAGS)
 
+C_OBJECTS = $(C_SOURCES:.c=.o)
+
+src/%.o: src/%.c $(DEPS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
 clean:
-	rm -f $(TARGET) test_crypto test_totp test_vault test_parser
+	rm -f $(TARGET) test_crypto test_totp test_vault test_parser *.o src/*.o tests/*.o
 
 test: test_crypto test_totp test_vault test_parser
 
-test_crypto: tests/test_crypto.cpp $(C_SOURCES) $(DEPS)
-	$(CXX) $(CXXFLAGS) tests/test_crypto.cpp $(C_SOURCES) -o test_crypto $(TEST_LDFLAGS)
-	@echo "=== Running Crypto Tests ==="
+test_crypto: tests/test_crypto.cpp $(C_OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) tests/test_crypto.cpp $(C_OBJECTS) -o test_crypto $(TEST_LDFLAGS)
+	@echo "Running Crypto Tests"
 	./test_crypto
 
-test_totp: tests/test_totp.cpp $(C_SOURCES) $(DEPS)
-	$(CXX) $(CXXFLAGS) tests/test_totp.cpp $(C_SOURCES) -o test_totp $(TEST_LDFLAGS)
-	@echo "=== Running TOTP Tests ==="
+test_totp: tests/test_totp.cpp $(C_OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) tests/test_totp.cpp $(C_OBJECTS) -o test_totp $(TEST_LDFLAGS)
+	@echo "Running TOTP Tests"
 	./test_totp
 
-test_vault: tests/test_vault.cpp $(C_SOURCES) $(DEPS)
-	$(CXX) $(CXXFLAGS) tests/test_vault.cpp $(C_SOURCES) -o test_vault $(TEST_LDFLAGS)
-	@echo "=== Running Vault Tests ==="
+test_vault: tests/test_vault.cpp $(C_OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) tests/test_vault.cpp $(C_OBJECTS) -o test_vault $(TEST_LDFLAGS)
+	@echo "Running Vault Tests"
 	./test_vault
 
-test_parser: tests/test_arg_parse.cpp $(C_SOURCES) $(DEPS)
-	$(CXX) $(CXXFLAGS) tests/test_arg_parse.cpp $(C_SOURCES) -o test_parser $(TEST_LDFLAGS)
-	@echo "=== Running Parser Tests ==="
+test_parser: tests/test_arg_parse.cpp $(C_OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) tests/test_arg_parse.cpp $(C_OBJECTS) -o test_parser $(TEST_LDFLAGS)
+	@echo "Running Parser Tests"
 	./test_parser
