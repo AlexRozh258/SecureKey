@@ -4,7 +4,6 @@
 #include <termios.h>
 #include <unistd.h>
 
-// Check password strength and return score
 int check_password_strength(const char* password) {
     if (!password || strlen(password) == 0) {
         return -1;
@@ -20,14 +19,12 @@ int check_password_strength(const char* password) {
         else has_special = 1;
     }
 
-    // Calculate score: length component + character variety
     int score = (length >= 12 ? 2 : length >= 8 ? 1 : 0) +
                 has_lower + has_upper + has_digit + has_special;
 
     return score;
 }
 
-// Generate a random password
 int generate_random_password(char* output, size_t output_len, int length) {
     if (!output || output_len == 0 || length < 8 || length > 64) {
         return -1;
@@ -58,7 +55,6 @@ int generate_random_password(char* output, size_t output_len, int length) {
     return 0;
 }
 
-// Read password securely from terminal (no echo)
 int read_password_secure(const char* prompt, char* password, size_t max_len) {
     struct termios old_term, new_term;
 
@@ -69,7 +65,6 @@ int read_password_secure(const char* prompt, char* password, size_t max_len) {
     printf("%s", prompt);
     fflush(stdout);
 
-    // Disable echo
     if (tcgetattr(STDIN_FILENO, &old_term) != 0) {
         return -1;
     }
@@ -81,10 +76,8 @@ int read_password_secure(const char* prompt, char* password, size_t max_len) {
         return -1;
     }
 
-    // Read password
     char* result = fgets(password, max_len, stdin);
 
-    // Restore terminal settings
     tcsetattr(STDIN_FILENO, TCSANOW, &old_term);
     printf("\n");
 
@@ -92,7 +85,6 @@ int read_password_secure(const char* prompt, char* password, size_t max_len) {
         return -1;
     }
 
-    // Remove newline
     size_t len = strlen(password);
     if (len > 0 && password[len - 1] == '\n') {
         password[len - 1] = '\0';
