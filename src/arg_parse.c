@@ -34,6 +34,8 @@ int parse_arguments(int argc, char *argv[], arguments_t *args) {
         args->command = CMD_GENERATE;
     } else if (strcmp(argv[1], "init") == 0) {
         args->command = CMD_INIT;
+    } else if (strcmp(argv[1], "change-password") == 0 || strcmp(argv[1], "passwd") == 0) {
+        args->command = CMD_CHANGE_PASSWORD;
     } else if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
         print_usage(argv[0]);
         exit(0);
@@ -155,14 +157,15 @@ void print_usage(const char *program_name) {
     printf("Usage: %s <command> [options]\n\n", program_name);
     
     printf("Commands:\n");
-    printf("  store, add     Store a new password\n");
-    printf("  get, retrieve  Retrieve a password\n");
-    printf("  list, ls       List all stored services\n");
-    printf("  remove, rm     Remove a stored password\n");
-    printf("  totp, 2fa      Generate TOTP code\n");
-    printf("  check, validate Check password strength\n");
-    printf("  generate, gen  Generate a strong password\n");
-    printf("  init           Initialize new vault\n\n");
+    printf("  store, add         Store a new password\n");
+    printf("  get, retrieve      Retrieve a password\n");
+    printf("  list, ls           List all stored services\n");
+    printf("  remove, rm         Remove a stored password\n");
+    printf("  totp, 2fa          Generate TOTP code\n");
+    printf("  check, validate    Check password strength\n");
+    printf("  generate, gen      Generate a strong password\n");
+    printf("  init               Initialize new vault\n");
+    printf("  change-password    Change vault master password\n\n");
     
     printf("Options:\n");
     printf("  -s, --service <name>    Service name (e.g., github, gmail)\n");
@@ -184,6 +187,7 @@ void print_usage(const char *program_name) {
     printf("  %s check -p 'MyPassword123!'\n", program_name);
     printf("  %s generate -l 20 --show\n", program_name);
     printf("  %s init -v my_vault.dat\n", program_name);
+    printf("  %s change-password\n", program_name);
 }
 
 void print_version(void) {
@@ -201,6 +205,7 @@ const char* command_to_string(command_t cmd) {
         case CMD_CHECK: return "check";
         case CMD_GENERATE: return "generate";
         case CMD_INIT: return "init";
+        case CMD_CHANGE_PASSWORD: return "change-password";
         default: return "unknown";
     }
 }

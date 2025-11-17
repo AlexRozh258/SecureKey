@@ -151,6 +151,73 @@ int main(int argc, char* argv[]) {
         return ret;
     }
 
+    if (args.command == CMD_CHANGE_PASSWORD) {
+        if (!vault_exists(vault_path)) {
+            fprintf(stderr, "Error: Vault does not exist at: %s\n", vault_path);
+            fprintf(stderr, "Use 'init' command to create a new vault\n");
+            crypto_cleanup();
+            return 1;
+        }
+
+        if (read_password_secure("Enter current master password: ", master_password, MAX_PASSWORD_LEN) != 0) {
+            fprintf(stderr, "Error: Failed to read password\n");
+            crypto_cleanup();
+            return 1;
+        }
+
+        if (vault_verify_password(master_password, vault_path) != 0) {
+            fprintf(stderr, "Error: Wrong password or failed to open vault\n");
+            secure_cleanup(master_password, MAX_PASSWORD_LEN);
+            crypto_cleanup();
+            return 1;
+        }
+
+        char new_password[MAX_PASSWORD_LEN];
+        if (read_password_secure("Enter new master password: ", new_password, MAX_PASSWORD_LEN) != 0) {
+            fprintf(stderr, "Error: Failed to read password\n");
+            secure_cleanup(master_password, MAX_PASSWORD_LEN);
+            vault_cleanup();
+            crypto_cleanup();
+            return 1;
+        }
+
+        char new_password_confirm[MAX_PASSWORD_LEN];
+        if (read_password_secure("Confirm new master password: ", new_password_confirm, MAX_PASSWORD_LEN) != 0) {
+            fprintf(stderr, "Error: Failed to read password\n");
+            secure_cleanup(master_password, MAX_PASSWORD_LEN);
+            secure_cleanup(new_password, MAX_PASSWORD_LEN);
+            vault_cleanup();
+            crypto_cleanup();
+            return 1;
+        }
+
+        if (strcmp(new_password, new_password_confirm) != 0) {
+            fprintf(stderr, "Error: Passwords do not match\n");
+            secure_cleanup(master_password, MAX_PASSWORD_LEN);
+            secure_cleanup(new_password, MAX_PASSWORD_LEN);
+            secure_cleanup(new_password_confirm, MAX_PASSWORD_LEN);
+            vault_cleanup();
+            crypto_cleanup();
+            return 1;
+        }
+
+        secure_cleanup(new_password_confirm, MAX_PASSWORD_LEN);
+
+        ret = vault_change_master_password(master_password, new_password);
+        secure_cleanup(master_password, MAX_PASSWORD_LEN);
+        secure_cleanup(new_password, MAX_PASSWORD_LEN);
+
+        if (ret == 0) {
+            printf("Master password changed successfully\n");
+        } else {
+            fprintf(stderr, "Error: Failed to change master password\n");
+        }
+
+        vault_cleanup();
+        crypto_cleanup();
+        return ret;
+    }
+
     if (!vault_exists(vault_path)) {
         fprintf(stderr, "Error: Vault does not exist. Use 'init' command to create one.\n");
         crypto_cleanup();

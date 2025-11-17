@@ -10,13 +10,14 @@ extern "C" {
 typedef enum {
     CMD_NONE,
     CMD_STORE,
-    CMD_RETRIEVE, 
+    CMD_RETRIEVE,
     CMD_LIST,
     CMD_REMOVE,
     CMD_TOTP,
     CMD_CHECK,
     CMD_GENERATE,
-    CMD_INIT
+    CMD_INIT,
+    CMD_CHANGE_PASSWORD
 } command_t;
 
 typedef struct {

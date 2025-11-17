@@ -27,6 +27,30 @@ clean:
 
 test: test_crypto test_totp test_vault test_parser test_global
 
+valgrind_crypto: test_crypto
+	@echo "Running Crypto Tests with Valgrind"
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./test_crypto
+
+valgrind_totp: test_totp
+	@echo "Running TOTP Tests with Valgrind"
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./test_totp
+
+valgrind_vault: test_vault
+	@echo "Running Vault Tests with Valgrind"
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./test_vault
+
+valgrind_parser: test_parser
+	@echo "Running Parser Tests with Valgrind"
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./test_parser
+
+valgrind_global: test_global
+	@echo "Running Global Tests with Valgrind"
+	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./test_global
+
+valgrind_all: valgrind_crypto valgrind_totp valgrind_vault valgrind_parser valgrind_global
+	@echo ""
+	@echo "All Valgrind tests completed successfully"
+
 test_crypto: tests/test_crypto.cpp $(C_OBJECTS) $(DEPS)
 	$(CXX) $(CXXFLAGS) tests/test_crypto.cpp $(C_OBJECTS) -o test_crypto $(TEST_LDFLAGS)
 	@echo "Running Crypto Tests"
