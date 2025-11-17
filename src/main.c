@@ -9,7 +9,6 @@
 
 #define MAX_PASSWORD_LEN 256
 
-// Helper function to display password strength
 static void display_password_strength(const char* password) {
     if (!password || strlen(password) == 0) {
         fprintf(stderr, "Error: Password cannot be empty\n");
@@ -60,7 +59,6 @@ int main(int argc, char* argv[]) {
 
     int ret = 0;
 
-    // Handle commands that don't need vault access
     switch (args.command) {
         case CMD_TOTP: {
             uint32_t code = generate_totp(args.totp_secret);
@@ -95,16 +93,13 @@ int main(int argc, char* argv[]) {
             break;
     }
 
-    // Commands that need vault access
     char master_password[MAX_PASSWORD_LEN];
     const char* vault_path = vault_get_default_path();
 
-    // Use custom vault path if provided
     if (args.vault_file[0] != '\0' && strcmp(args.vault_file, "securekey.vault") != 0) {
         vault_path = args.vault_file;
     }
 
-    // Check if we need to initialize a new vault
     if (args.command == CMD_INIT) {
         if (vault_exists(vault_path)) {
             printf("Vault already exists at: %s\n", vault_path);
@@ -156,21 +151,18 @@ int main(int argc, char* argv[]) {
         return ret;
     }
 
-    // For other commands, vault must exist
     if (!vault_exists(vault_path)) {
         fprintf(stderr, "Error: Vault does not exist. Use 'init' command to create one.\n");
         crypto_cleanup();
         return 1;
     }
 
-    // Read master password
     if (read_password_secure("Enter master password: ", master_password, MAX_PASSWORD_LEN) != 0) {
         fprintf(stderr, "Error: Failed to read password\n");
         crypto_cleanup();
         return 1;
     }
 
-    // Initialize vault with master password
     ret = vault_init(master_password, vault_path);
     secure_cleanup(master_password, MAX_PASSWORD_LEN);
 
@@ -181,7 +173,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Execute command
     switch (args.command) {
         case CMD_STORE: {
             char password[MAX_PASSWORD_LEN];
