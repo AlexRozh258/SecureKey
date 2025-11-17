@@ -25,7 +25,6 @@ protected:
         crypto_cleanup();
         remove(vault_path);
 
-        // Also remove backup file if it exists
         char backup_path[512];
         snprintf(backup_path, sizeof(backup_path), "%s.backup", vault_path);
         remove(backup_path);
@@ -34,10 +33,6 @@ protected:
     char vault_path[256];
     const char* master_password;
 };
-
-// ============================================================================
-// Utility Functions Tests
-// ============================================================================
 
 TEST_F(GlobalIntegrationTest, PasswordStrengthWeak) {
     int score = check_password_strength("abc");
@@ -71,7 +66,6 @@ TEST_F(GlobalIntegrationTest, GeneratePasswordValid) {
     EXPECT_EQ(result, 0) << "Password generation should succeed";
     EXPECT_EQ(strlen(password), 16) << "Generated password should have requested length";
 
-    // Check that password contains variety
     int has_lower = 0, has_upper = 0, has_digit = 0;
     for (size_t i = 0; i < strlen(password); i++) {
         if (password[i] >= 'a' && password[i] <= 'z') has_lower = 1;
@@ -79,7 +73,6 @@ TEST_F(GlobalIntegrationTest, GeneratePasswordValid) {
         if (password[i] >= '0' && password[i] <= '9') has_digit = 1;
     }
 
-    // At least some variety should be present in a 16-char password
     EXPECT_GT(has_lower + has_upper + has_digit, 0) << "Password should have character variety";
 }
 
@@ -107,23 +100,16 @@ TEST_F(GlobalIntegrationTest, GeneratePasswordNullBuffer) {
         << "Should fail with NULL buffer";
 }
 
-// ============================================================================
-// End-to-End Vault Workflow Tests
-// ============================================================================
-
 TEST_F(GlobalIntegrationTest, CompleteVaultWorkflow) {
-    // 1. Initialize vault
     ASSERT_EQ(vault_init(master_password, vault_path), 0)
         << "Vault initialization should succeed";
 
-    // 2. Store multiple entries
     ASSERT_EQ(vault_store("GitHub", "user@example.com", "GithubPass123", NULL, false), 0);
     ASSERT_EQ(vault_store("Gmail", "user@gmail.com", "GmailPass456", "JBSWY3DPEHPK3PXP", false), 0);
     ASSERT_EQ(vault_store("AWS", "admin", "AwsSecure789!", NULL, false), 0);
 
     EXPECT_EQ(vault_entry_count(), 3) << "Should have 3 entries";
 
-    // 3. Retrieve entries
     VaultEntry entry;
     ASSERT_EQ(vault_get("GitHub", "user@example.com", &entry), 0);
     EXPECT_STREQ(entry.password, "GithubPass123");
@@ -133,16 +119,13 @@ TEST_F(GlobalIntegrationTest, CompleteVaultWorkflow) {
     EXPECT_STREQ(entry.password, "GmailPass456");
     EXPECT_STREQ(entry.totp_secret, "JBSWY3DPEHPK3PXP");
 
-    // 4. Update an entry
     ASSERT_EQ(vault_store("GitHub", "user@example.com", "NewGithubPass999", NULL, true), 0);
     ASSERT_EQ(vault_get("GitHub", "user@example.com", &entry), 0);
     EXPECT_STREQ(entry.password, "NewGithubPass999");
 
-    // 5. Remove an entry
     ASSERT_EQ(vault_remove("AWS", "admin"), 0);
     EXPECT_EQ(vault_entry_count(), 2) << "Should have 2 entries after removal";
 
-    // 6. Verify persistence
     vault_cleanup();
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
 
@@ -152,32 +135,25 @@ TEST_F(GlobalIntegrationTest, CompleteVaultWorkflow) {
 }
 
 TEST_F(GlobalIntegrationTest, VaultWithTOTPIntegration) {
-    // Initialize vault and store entry with TOTP
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
 
-    // Generate TOTP secret
     char totp_secret[64];
     ASSERT_EQ(generate_totp_secret(totp_secret, sizeof(totp_secret)), 0);
 
-    // Store with TOTP
     ASSERT_EQ(vault_store("Google", "user@google.com", "GooglePass123", totp_secret, false), 0);
 
-    // Retrieve and verify
     VaultEntry entry;
     ASSERT_EQ(vault_get("Google", "user@google.com", &entry), 0);
     EXPECT_STREQ(entry.totp_secret, totp_secret);
 
-    // Generate and validate TOTP code
     uint32_t code = generate_totp(entry.totp_secret);
     EXPECT_EQ(validate_totp(entry.totp_secret, code), 0)
         << "Generated TOTP code should validate";
 }
 
 TEST_F(GlobalIntegrationTest, MultipleVaultOperationsWithCrypto) {
-    // Test that crypto engine handles multiple vault operations correctly
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
 
-    // Store entries with various password strengths
     const char* services[] = {"Service1", "Service2", "Service3", "Service4"};
     const char* passwords[] = {"weak", "Moderate1", "VeryStrong123!", "Ultra$ecure2024!@#"};
 
@@ -188,7 +164,6 @@ TEST_F(GlobalIntegrationTest, MultipleVaultOperationsWithCrypto) {
             << "Failed to store entry " << i;
     }
 
-    // Retrieve and verify all entries
     for (int i = 0; i < 4; i++) {
         char username[64];
         snprintf(username, sizeof(username), "user%d", i);
@@ -197,39 +172,32 @@ TEST_F(GlobalIntegrationTest, MultipleVaultOperationsWithCrypto) {
         ASSERT_EQ(vault_get(services[i], username, &entry), 0);
         EXPECT_STREQ(entry.password, passwords[i]) << "Password mismatch for entry " << i;
 
-        // Check password strength
         int strength = check_password_strength(entry.password);
         EXPECT_GE(strength, 0) << "Password strength check should succeed";
     }
 }
 
 TEST_F(GlobalIntegrationTest, VaultBackupAndRestore) {
-    // Initialize and populate vault
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
     ASSERT_EQ(vault_store("Original", "user1", "Password1", NULL, false), 0);
     ASSERT_EQ(vault_store("Data", "user2", "Password2", NULL, false), 0);
 
-    // Create backup - this creates vault_path.backup
     ASSERT_EQ(vault_backup(vault_path), 0) << "Backup should succeed";
 
-    // Verify backup file exists
     char backup_path[512];
     snprintf(backup_path, sizeof(backup_path), "%s.backup", vault_path);
     FILE* backup_file = fopen(backup_path, "r");
     ASSERT_NE(backup_file, nullptr) << "Backup file should exist";
     fclose(backup_file);
 
-    // Close current vault
     vault_cleanup();
 
-    // Now test restore by copying backup to a new location and opening it
     char temp_vault[512];
     snprintf(temp_vault, sizeof(temp_vault), "/tmp/test_vault_restored_%d.dat", getpid());
 
     ASSERT_EQ(vault_restore(backup_path, temp_vault), 0) << "Restore should succeed";
     ASSERT_EQ(vault_init(master_password, temp_vault), 0) << "Opening restored vault should succeed";
 
-    // Verify original data is in restored vault
     EXPECT_EQ(vault_entry_count(), 2) << "Restored vault should have 2 entries";
     VaultEntry entry;
     ASSERT_EQ(vault_get("Original", "user1", &entry), 0);
@@ -242,17 +210,14 @@ TEST_F(GlobalIntegrationTest, VaultBackupAndRestore) {
 }
 
 TEST_F(GlobalIntegrationTest, ChangeMasterPasswordIntegration) {
-    // Initialize vault with data
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
     ASSERT_EQ(vault_store("Service1", "user1", "Pass1", NULL, false), 0);
     ASSERT_EQ(vault_store("Service2", "user2", "Pass2", "JBSWY3DPEHPK3PXP", false), 0);
 
-    // Change master password
     const char* new_password = "NewMasterPass456!";
     ASSERT_EQ(vault_change_master_password(master_password, new_password), 0)
         << "Password change should succeed";
 
-    // Close and reopen with new password
     vault_cleanup();
     ASSERT_NE(vault_init(master_password, vault_path), 0)
         << "Old password should not work";
@@ -261,7 +226,6 @@ TEST_F(GlobalIntegrationTest, ChangeMasterPasswordIntegration) {
     ASSERT_EQ(vault_init(new_password, vault_path), 0)
         << "New password should work";
 
-    // Verify data integrity
     VaultEntry entry;
     ASSERT_EQ(vault_get("Service1", "user1", &entry), 0);
     EXPECT_STREQ(entry.password, "Pass1");
@@ -274,7 +238,6 @@ TEST_F(GlobalIntegrationTest, ChangeMasterPasswordIntegration) {
 TEST_F(GlobalIntegrationTest, ConcurrentPasswordGenerationAndStorage) {
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
 
-    // Generate multiple passwords and store them
     for (int i = 0; i < 10; i++) {
         char password[65];
         char service[64], username[64];
@@ -288,7 +251,6 @@ TEST_F(GlobalIntegrationTest, ConcurrentPasswordGenerationAndStorage) {
         ASSERT_EQ(vault_store(service, username, password, NULL, false), 0)
             << "Storage failed for iteration " << i;
 
-        // Verify immediately
         VaultEntry entry;
         ASSERT_EQ(vault_get(service, username, &entry), 0);
         EXPECT_STREQ(entry.password, password);
@@ -300,7 +262,6 @@ TEST_F(GlobalIntegrationTest, ConcurrentPasswordGenerationAndStorage) {
 TEST_F(GlobalIntegrationTest, PasswordStrengthAndVaultStorage) {
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
 
-    // Test storing passwords of different strengths
     struct {
         const char* password;
         int min_expected_score;
@@ -315,29 +276,23 @@ TEST_F(GlobalIntegrationTest, PasswordStrengthAndVaultStorage) {
         char service[64];
         snprintf(service, sizeof(service), "Service%zu", i);
 
-        // Check strength before storing
         int strength = check_password_strength(test_cases[i].password);
         EXPECT_GE(strength, test_cases[i].min_expected_score)
             << "Password strength mismatch for: " << test_cases[i].password;
 
-        // Store in vault
         ASSERT_EQ(vault_store(service, "user", test_cases[i].password, NULL, false), 0);
 
-        // Retrieve and verify
         VaultEntry entry;
         ASSERT_EQ(vault_get(service, "user", &entry), 0);
         EXPECT_STREQ(entry.password, test_cases[i].password);
 
-        // Verify strength again after retrieval
         int strength_after = check_password_strength(entry.password);
         EXPECT_EQ(strength, strength_after) << "Strength should not change after storage";
     }
 }
 
 TEST_F(GlobalIntegrationTest, ArgumentParsingIntegration) {
-    // Test that argument parser works with all command types
 
-    // Test store command
     const char* store_args[] = {"securekey", "store", "-s", "github", "-u", "user@test.com"};
     arguments_t args;
     EXPECT_EQ(parse_arguments(6, (char**)store_args, &args), 0);
@@ -345,19 +300,16 @@ TEST_F(GlobalIntegrationTest, ArgumentParsingIntegration) {
     EXPECT_STREQ(args.service, "github");
     EXPECT_STREQ(args.username, "user@test.com");
 
-    // Test retrieve command
     const char* get_args[] = {"securekey", "get", "-s", "gmail", "-u", "test@gmail.com", "--show"};
     EXPECT_EQ(parse_arguments(7, (char**)get_args, &args), 0);
     EXPECT_EQ(args.command, CMD_RETRIEVE);
     EXPECT_EQ(args.show_password, 1);
 
-    // Test generate command
     const char* gen_args[] = {"securekey", "generate", "-l", "20", "--show"};
     EXPECT_EQ(parse_arguments(5, (char**)gen_args, &args), 0);
     EXPECT_EQ(args.command, CMD_GENERATE);
     EXPECT_EQ(args.password_length, 20);
 
-    // Test check command
     const char* check_args[] = {"securekey", "check", "-p", "TestPass123"};
     EXPECT_EQ(parse_arguments(4, (char**)check_args, &args), 0);
     EXPECT_EQ(args.command, CMD_CHECK);
@@ -365,41 +317,31 @@ TEST_F(GlobalIntegrationTest, ArgumentParsingIntegration) {
 }
 
 TEST_F(GlobalIntegrationTest, FullSystemIntegration) {
-    // Simulate a complete user workflow
 
-    // 1. Generate strong password
     char generated_password[65];
     ASSERT_EQ(generate_random_password(generated_password, sizeof(generated_password), 20), 0);
 
-    // 2. Check its strength
     int strength = check_password_strength(generated_password);
     EXPECT_GT(strength, 4) << "Generated 20-char password should be strong";
 
-    // 3. Initialize vault with master password
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
 
-    // 4. Generate TOTP secret
     char totp_secret[64];
     ASSERT_EQ(generate_totp_secret(totp_secret, sizeof(totp_secret)), 0);
 
-    // 5. Store entry with both password and TOTP
     ASSERT_EQ(vault_store("CriticalService", "admin@company.com",
                          generated_password, totp_secret, false), 0);
 
-    // 6. Retrieve entry
     VaultEntry entry;
     ASSERT_EQ(vault_get("CriticalService", "admin@company.com", &entry), 0);
     EXPECT_STREQ(entry.password, generated_password);
     EXPECT_STREQ(entry.totp_secret, totp_secret);
 
-    // 7. Generate and validate TOTP
     uint32_t totp_code = generate_totp(totp_secret);
     EXPECT_EQ(validate_totp(totp_secret, totp_code), 0);
 
-    // 8. Create backup
     ASSERT_EQ(vault_backup(vault_path), 0);
 
-    // 9. Verify persistence
     vault_cleanup();
     ASSERT_EQ(vault_init(master_password, vault_path), 0);
     ASSERT_EQ(vault_get("CriticalService", "admin@company.com", &entry), 0);
