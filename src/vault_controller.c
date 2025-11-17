@@ -11,7 +11,7 @@
 static VaultState g_vault = {
     .vault_path = {0},
     .key = {0},
-    .header = {0},
+    .header = {{0}},
     .entries = NULL,
     .is_open = false,
     .auto_backup = true
@@ -507,7 +507,7 @@ int vault_backup(const char* vault_path) {
         return -1;
     }
 
-    char backup_path[512];
+    char backup_path[1024];
     snprintf(backup_path, sizeof(backup_path), "%s.backup", expanded_vault);
 
     if (copy_file(expanded_vault, backup_path) != 0) {
