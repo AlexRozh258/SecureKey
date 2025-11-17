@@ -6,11 +6,11 @@ LDFLAGS = -lssl -lcrypto
 TEST_LDFLAGS = -lssl -lcrypto -lgtest -lgtest_main -pthread
 TEST_GLOBAL_SOURCE = tests/test_global.cpp
 
-C_SOURCES = src/crypto_engine.c src/vault_controller.c src/totp_engine.c src/arg_parse.c
+C_SOURCES = src/crypto_engine.c src/vault_controller.c src/totp_engine.c src/arg_parse.c src/utilities.c
 MAIN_SOURCE = src/main.c
 
 TARGET = securekey
-DEPS = include/arg_parse.h include/vault_controller.h include/crypto_engine.h include/totp_engine.h
+DEPS = include/arg_parse.h include/vault_controller.h include/crypto_engine.h include/totp_engine.h include/utilities.h
 
 all: $(TARGET)
 

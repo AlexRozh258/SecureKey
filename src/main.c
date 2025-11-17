@@ -1,81 +1,19 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include <termios.h>
-#include <unistd.h>
 #include "arg_parse.h"
 #include "crypto_engine.h"
 #include "vault_controller.h"
 #include "totp_engine.h"
+#include "utilities.h"
 
 #define MAX_PASSWORD_LEN 256
 
-static int read_password(const char* prompt, char* password, size_t max_len) {
-    struct termios old_term, new_term;
-
-    printf("%s", prompt);
-    fflush(stdout);
-
-    tcgetattr(STDIN_FILENO, &old_term);
-    new_term = old_term;
-    new_term.c_lflag &= ~ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_term);
-
-    if (fgets(password, max_len, stdin) == NULL) {
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_term);
-        printf("\n");
-        return -1;
-    }
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &old_term);
-    printf("\n");
-
-    size_t len = strlen(password);
-    if (len > 0 && password[len - 1] == '\n') {
-        password[len - 1] = '\0';
-    }
-
-    return 0;
-}
-
-static int generate_password(int length, int show) {
-    if (length < 8 || length > 64) {
-        fprintf(stderr, "Error: Password length must be between 8 and 64\n");
-        return 1;
-    }
-
-    const char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+";
-    char password[65];
-
-    FILE* urandom = fopen("/dev/urandom", "r");
-    if (!urandom) {
-        fprintf(stderr, "Error: Failed to open /dev/urandom\n");
-        return 1;
-    }
-
-    for (int i = 0; i < length; i++) {
-        unsigned char byte;
-        fread(&byte, 1, 1, urandom);
-        password[i] = charset[byte % (sizeof(charset) - 1)];
-    }
-    password[length] = '\0';
-
-    fclose(urandom);
-
-    if (show) {
-        printf("Generated password: %s\n", password);
-    } else {
-        printf("Generated password (hidden)\n");
-        printf("Use --show to display the password\n");
-    }
-
-    return 0;
-}
-
-static int check_password(const char* password) {
+// Helper function to display password strength
+static void display_password_strength(const char* password) {
     if (!password || strlen(password) == 0) {
         fprintf(stderr, "Error: Password cannot be empty\n");
-        return 1;
+        return;
     }
 
     int length = strlen(password);
@@ -95,8 +33,7 @@ static int check_password(const char* password) {
     printf("  Digits: %s\n", has_digit ? "Yes" : "No");
     printf("  Special characters: %s\n", has_special ? "Yes" : "No");
 
-    int score = (length >= 12 ? 2 : length >= 8 ? 1 : 0) +
-                has_lower + has_upper + has_digit + has_special;
+    int score = check_password_strength(password);
 
     printf("\nOverall strength: ");
     if (score >= 6) {
@@ -106,8 +43,6 @@ static int check_password(const char* password) {
     } else {
         printf("WEAK\n");
     }
-
-    return 0;
 }
 
 int main(int argc, char* argv[]) {
@@ -125,6 +60,7 @@ int main(int argc, char* argv[]) {
 
     int ret = 0;
 
+    // Handle commands that don't need vault access
     switch (args.command) {
         case CMD_TOTP: {
             uint32_t code = generate_totp(args.totp_secret);
@@ -134,26 +70,41 @@ int main(int argc, char* argv[]) {
         }
 
         case CMD_CHECK:
-            ret = check_password(args.password);
+            display_password_strength(args.password);
             crypto_cleanup();
-            return ret;
+            return 0;
 
-        case CMD_GENERATE:
-            ret = generate_password(args.password_length, args.show_password);
+        case CMD_GENERATE: {
+            char password[65];
+            if (generate_random_password(password, sizeof(password), args.password_length) != 0) {
+                fprintf(stderr, "Error: Failed to generate password\n");
+                crypto_cleanup();
+                return 1;
+            }
+            if (args.show_password) {
+                printf("Generated password: %s\n", password);
+            } else {
+                printf("Generated password (hidden)\n");
+                printf("Use --show to display the password\n");
+            }
             crypto_cleanup();
-            return ret;
+            return 0;
+        }
 
         default:
             break;
     }
 
+    // Commands that need vault access
     char master_password[MAX_PASSWORD_LEN];
     const char* vault_path = vault_get_default_path();
 
+    // Use custom vault path if provided
     if (args.vault_file[0] != '\0' && strcmp(args.vault_file, "securekey.vault") != 0) {
         vault_path = args.vault_file;
     }
 
+    // Check if we need to initialize a new vault
     if (args.command == CMD_INIT) {
         if (vault_exists(vault_path)) {
             printf("Vault already exists at: %s\n", vault_path);
@@ -167,14 +118,14 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        if (read_password("Enter master password: ", master_password, MAX_PASSWORD_LEN) != 0) {
+        if (read_password_secure("Enter master password: ", master_password, MAX_PASSWORD_LEN) != 0) {
             fprintf(stderr, "Error: Failed to read password\n");
             crypto_cleanup();
             return 1;
         }
 
         char master_password_confirm[MAX_PASSWORD_LEN];
-        if (read_password("Confirm master password: ", master_password_confirm, MAX_PASSWORD_LEN) != 0) {
+        if (read_password_secure("Confirm master password: ", master_password_confirm, MAX_PASSWORD_LEN) != 0) {
             fprintf(stderr, "Error: Failed to read password\n");
             secure_cleanup(master_password, MAX_PASSWORD_LEN);
             crypto_cleanup();
@@ -205,18 +156,21 @@ int main(int argc, char* argv[]) {
         return ret;
     }
 
+    // For other commands, vault must exist
     if (!vault_exists(vault_path)) {
         fprintf(stderr, "Error: Vault does not exist. Use 'init' command to create one.\n");
         crypto_cleanup();
         return 1;
     }
 
-    if (read_password("Enter master password: ", master_password, MAX_PASSWORD_LEN) != 0) {
+    // Read master password
+    if (read_password_secure("Enter master password: ", master_password, MAX_PASSWORD_LEN) != 0) {
         fprintf(stderr, "Error: Failed to read password\n");
         crypto_cleanup();
         return 1;
     }
 
+    // Initialize vault with master password
     ret = vault_init(master_password, vault_path);
     secure_cleanup(master_password, MAX_PASSWORD_LEN);
 
@@ -227,10 +181,11 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
+    // Execute command
     switch (args.command) {
         case CMD_STORE: {
             char password[MAX_PASSWORD_LEN];
-            if (read_password("Enter password to store: ", password, MAX_PASSWORD_LEN) != 0) {
+            if (read_password_secure("Enter password to store: ", password, MAX_PASSWORD_LEN) != 0) {
                 fprintf(stderr, "Error: Failed to read password\n");
                 ret = 1;
                 break;
