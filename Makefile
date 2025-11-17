@@ -4,6 +4,7 @@ CFLAGS = -Wall -Wextra -Iinclude -g
 CXXFLAGS = -Wall -Wextra -Iinclude -g -std=c++14
 LDFLAGS = -lssl -lcrypto
 TEST_LDFLAGS = -lssl -lcrypto -lgtest -lgtest_main -pthread
+TEST_GLOBAL_SOURCE = tests/test_global.cpp
 
 C_SOURCES = src/crypto_engine.c src/vault_controller.c src/totp_engine.c src/arg_parse.c
 MAIN_SOURCE = src/main.c
@@ -22,9 +23,9 @@ src/%.o: src/%.c $(DEPS)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(TARGET) test_crypto test_totp test_vault test_parser *.o src/*.o tests/*.o
+	rm -f $(TARGET) test_crypto test_totp test_vault test_parser test_global *.o src/*.o tests/*.o
 
-test: test_crypto test_totp test_vault test_parser
+test: test_crypto test_totp test_vault test_parser test_global
 
 test_crypto: tests/test_crypto.cpp $(C_OBJECTS) $(DEPS)
 	$(CXX) $(CXXFLAGS) tests/test_crypto.cpp $(C_OBJECTS) -o test_crypto $(TEST_LDFLAGS)
@@ -41,7 +42,12 @@ test_vault: tests/test_vault.cpp $(C_OBJECTS) $(DEPS)
 	@echo "Running Vault Tests"
 	./test_vault
 
-test_parser: tests/test_arg_parse.cpp $(C_OBJECTS) $(DEPS)
-	$(CXX) $(CXXFLAGS) tests/test_arg_parse.cpp $(C_OBJECTS) -o test_parser $(TEST_LDFLAGS)
+test_parser: tests/test_parser.cpp $(C_OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) tests/test_parser.cpp $(C_OBJECTS) -o test_parser $(TEST_LDFLAGS)
 	@echo "Running Parser Tests"
 	./test_parser
+
+test_global: $(TEST_GLOBAL_SOURCE) $(C_OBJECTS) $(DEPS)
+	$(CXX) $(CXXFLAGS) $(TEST_GLOBAL_SOURCE) $(C_OBJECTS) -o test_global $(TEST_LDFLAGS)
+	@echo "Running Global Tests"
+	./test_global
