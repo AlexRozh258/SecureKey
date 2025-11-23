@@ -19,8 +19,20 @@ $(TARGET): $(MAIN_SOURCE) $(C_SOURCES) $(DEPS)
 
 C_OBJECTS = $(C_SOURCES:.c=.o)
 
-src/%.o: src/%.c $(DEPS)
-	$(CC) $(CFLAGS) -c $< -o $@
+src/crypto_engine.o: src/crypto_engine.c $(DEPS)
+	$(CC) $(CFLAGS) -c src/crypto_engine.c -o src/crypto_engine.o
+
+src/vault_controller.o: src/vault_controller.c $(DEPS)
+	$(CC) $(CFLAGS) -c src/vault_controller.c -o src/vault_controller.o
+
+src/totp_engine.o: src/totp_engine.c $(DEPS)
+	$(CC) $(CFLAGS) -c src/totp_engine.c -o src/totp_engine.o
+
+src/arg_parse.o: src/arg_parse.c $(DEPS)
+	$(CC) $(CFLAGS) -c src/arg_parse.c -o src/arg_parse.o
+
+src/utilities.o: src/utilities.c $(DEPS)
+	$(CC) $(CFLAGS) -c src/utilities.c -o src/utilities.o
 
 clean:
 	rm -f $(TARGET) test_crypto test_totp test_vault test_parser test_global *.o src/*.o tests/*.o
@@ -48,7 +60,6 @@ valgrind_global: test_global
 	valgrind --leak-check=full --show-leak-kinds=all --track-origins=yes --error-exitcode=1 ./test_global
 
 valgrind_all: valgrind_crypto valgrind_totp valgrind_vault valgrind_parser valgrind_global
-	@echo ""
 	@echo "All Valgrind tests completed successfully"
 
 test_crypto: tests/test_crypto.cpp $(C_OBJECTS) $(DEPS)
