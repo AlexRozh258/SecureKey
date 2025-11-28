@@ -165,7 +165,8 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        if (vault_verify_password(master_password, vault_path) != 0) {
+        ret = vault_init(master_password, vault_path);
+        if (ret != 0) {
             fprintf(stderr, "Error: Wrong password or failed to open vault\n");
             secure_cleanup(master_password, MAX_PASSWORD_LEN);
             crypto_cleanup();

@@ -303,6 +303,19 @@ TEST_F(VaultTest, ChangePasswordPreservesData) {
     EXPECT_STREQ(entry.password, "pass1");
 }
 
+TEST_F(VaultTest, ChangePasswordRequiresOpenVault) {
+    vault_init(master_password, test_vault_path);
+    vault_store("Service", "user", "password", nullptr, true);
+    vault_cleanup();
+
+    int result = vault_change_master_password(master_password, new_master_password);
+    EXPECT_NE(result, 0) << "Change password should fail when vault is not open";
+
+    vault_init(master_password, test_vault_path);
+    result = vault_change_master_password(master_password, new_master_password);
+    EXPECT_EQ(result, 0) << "Change password should succeed when vault is open";
+}
+
 TEST_F(VaultTest, FilePermissions) {
     vault_init(master_password, test_vault_path);
 
